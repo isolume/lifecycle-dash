@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    platform: linux/amd64
+    container_name: ua-postgis
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hackathon
+      POSTGRES_USER: hackathon
+      POSTGRES_PASSWORD: hackathon
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hackathon -d hackathon"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ua-dashboard
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      # Override host-based local env values for in-network container connectivity.
+      DATABASE_URL: postgres://hackathon:hackathon@postgres:5432/hackathon
+      DATABASE_SSL: "false"
+      UA_DATA_FILE: /app/data/UAInnovateDataset-SoCo.xlsx
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./data/UAInnovateDataset-SoCo.xlsx:/app/data/UAInnovateDataset-SoCo.xlsx:ro
+    command: >-
+      sh -c "npm run migrate && npm run ingest -- --file \"$${UA_DATA_FILE}\" && npm run start"
+
+volumes:
+  pgdata:
